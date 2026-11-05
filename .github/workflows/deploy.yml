@@ -1,0 +1,71 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Rules & scoring regression tests
+        run: npm test
+
+      - name: Headless auto-play simulation
+        run: npm run sim -- 40
+
+      - name: Build single-file edition
+        run: npm run build
+
+      - name: Browser usability regression
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: |
+          node serve.js &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          node -e "async function wait(){for(let i=0;i<40;i++){try{if((await fetch('http://localhost:8767')).ok)return;}catch{}await new Promise(r=>setTimeout(r,250));}throw new Error('服务启动超时');}wait();"
+          npm run browser
+
+      - name: Assemble static site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -R css js dist screenshots _site/
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

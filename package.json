@@ -1,0 +1,36 @@
+{
+  "name": "balabalatro",
+  "version": "1.0.0",
+  "description": "原创程序化美术的小丑牌玩法致敬：150 张小丑、完整计分流水线、手机横竖屏布局、复古电子配乐与可移植本地存档。纯 HTML5 + WebGL，零依赖。",
+  "keywords": [
+    "game",
+    "html5",
+    "balatro",
+    "roguelike",
+    "deckbuilder",
+    "poker",
+    "webgl",
+    "web-audio",
+    "procedural-graphics",
+    "no-dependencies",
+    "vanilla-js"
+  ],
+  "homepage": "https://lor3walker.github.io/balabalatro/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lor3walker/balabalatro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lor3walker/balabalatro/issues"
+  },
+  "license": "MIT",
+  "author": "Lor3walker",
+  "scripts": {
+    "build": "node build.js",
+    "check": "for f in js/*.js test/*.js build.js serve.js; do node --check \"$f\" || exit 1; done && echo \"all scripts OK\"",
+    "test": "node test/mechanics.js && node test/frontend.js",
+    "browser": "node test/browser.js",
+    "sim": "node test/sim.js",
+    "serve": "node serve.js"
+  }
+}

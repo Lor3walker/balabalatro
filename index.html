@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#163b3d">
+  <meta name="description" content="BalaBalaTro：零依赖、程序化美术的小丑牌玩法致敬。组合牌型，构筑小丑，挑战八个底注。">
+  <title>BalaBalaTro · 一手好戏</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a4545'/%3E%3Ctext x='32' y='48' font-size='50' text-anchor='middle' fill='%23eaca86'%3E♠%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="background" aria-hidden="true"></canvas>
+  <div id="viewport"><main id="stage" aria-label="BalaBalaTro 牌桌">
+    <div class="felt" aria-hidden="true"></div>
+    <header id="topbar"></header>
+    <aside id="sidebar"></aside>
+    <section id="inventory" aria-label="小丑与消耗牌"></section>
+    <section id="center" aria-label="当前游戏阶段"></section>
+    <section id="handbar" aria-label="手牌操作"></section>
+    <div id="cards" aria-label="纸牌"></div>
+    <div id="floating" aria-hidden="true"></div>
+    <footer id="footer"></footer>
+    <div id="menu"></div>
+    <div id="modal" hidden></div>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main></div>
+  <div id="rotate-hint">竖屏可滚动牌桌 · 长按纸牌查看详情</div>
+  <noscript>请启用 JavaScript 以运行游戏。</noscript>
+  <script src="js/utils.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/poker.js"></script>
+  <script src="js/jokers.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/layout.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/shop.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/bg.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

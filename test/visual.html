@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BalaBalaTro 视觉验收</title>
+<style>body{margin:0;background:#122f34;color:#eddfbf;font:16px system-ui}nav{display:flex;gap:10px;padding:10px;align-items:center}a{color:#e9bc67;padding:8px}iframe{display:block;width:100vw;height:calc(100vh - 59px);border:0}</style></head>
+<body><nav><strong>视觉验收</strong><a href="?scene=menu">菜单</a><a href="?scene=blinds">盲注</a><a href="?scene=round">回合</a><a href="?scene=score">计分</a><a href="?scene=shop">商店</a><a href="?scene=pack">补充包</a><a href="?scene=cash">结算</a><a href="?scene=collection">图鉴</a></nav><iframe id="game" title="游戏场景"></iframe>
+<script>var scene = new URLSearchParams(location.search).get('scene') || 'menu'; document.getElementById('game').src = '../index.html?scene=' + encodeURIComponent(scene);</script></body></html>

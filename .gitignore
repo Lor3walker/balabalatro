@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors / IDE
+.vscode/
+.idea/
+.qoder/
+*.swp
+*~
+
+# Node (this project has no dependencies, but just in case)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Local scratch / debugging artifacts
+.cache/
+.shots/
+.verify-*.png
+*.local.*
+
+# Visual-acceptance output: test/shots.sh writes PNGs to a directory you pass in.
+# The curated stills under screenshots/ are committed; one-off verification captures are not.
+shots-out/
+screenshots/verify-*
+screenshots/main_menu*.png
+screenshots/narrow_landscape*.png
+screenshots/portrait_*.png
+
+# Note: dist/balabalatro.html IS committed on purpose.
+# It is the "download one file and play" deliverable, so it must stay in the repo.
