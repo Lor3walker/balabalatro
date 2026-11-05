@@ -273,7 +273,7 @@
         case 'hanged_man': this.removePlayingCards(selected); break;
         case 'death':
           var target = selected[1], left = selected[0], id = left.id, played = left.playedAnte;
-          Object.keys(left).forEach(function (k) { delete left[k]; }); Object.assign(left, U.clone(target), { id: id, playedAnte: played, forced: false }); this.logEnhance(left); break;
+          Object.keys(left).forEach(function (k) { delete left[k]; }); Object.assign(left, U.clone(target), { id: id, playedAnte: played }); this.logEnhance(left); break;
         case 'judgement': this.createJoker(); break;
         case 'aura': selected[0].edition = this.pollEdition(1, true, true); this.logEnhance(selected[0]); break;
         case 'wraith': case 'soul': this.createJoker({ rarity: c.key === 'soul' ? 4 : 3 }); if (c.key === 'wraith') this.addMoney(-r.money); break;
@@ -300,6 +300,7 @@
     if ((c.kind === 'tarot' || c.kind === 'planet') && c.key !== 'fool') r.lastTarotPlanet = { kind: c.kind, key: c.key };
     this.context({ type: 'using_consumable', cons: c }); this.emit('use', { key: c.key, src: c.id });
     if (r.phase === 'round' && !r.hand.length) { this.drawCards(false); if (!r.hand.length) this.endRound(); }
+    if (r.phase === 'round') this.forceBell();
   };
   P.randomTag = function () {
     var r = this.run, def = this.rng.pick(D.TAGS.filter(function (t) { return t.ante <= r.ante; }));

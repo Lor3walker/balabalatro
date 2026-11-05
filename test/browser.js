@@ -39,6 +39,21 @@ async function launch() {
 }
 async function main() {
   await launch();
+  await test('界面文案精简且保留规则与覆盖提醒', async function () {
+    await metrics(1440, 900, false); await navigate('menu');
+    var redundant = /非官方|无原作素材|玩法致敬|种子序列独立|实现边界|TRIBUTE|零依赖|原创低保真/;
+    assert.equal(await evaluate('!!document.querySelector(".menu-note")'), false);
+    var menu = await evaluate('document.getElementById("menu").innerText');
+    assert.ok(!redundant.test(menu)); assert.ok(menu.includes('下一局，由你开场。')); assert.ok(menu.includes('一 手 好 戏'));
+    await screenshot('menu-copy');
+    await click('[data-act="rules"]'); var rules = await evaluate('document.getElementById("modal").innerText');
+    assert.ok(!redundant.test(rules)); assert.ok(rules.includes('石头牌总会计分')); assert.ok(rules.includes('小丑从左到右结算'));
+    await click('[data-act="close"]'); await click('[data-act="options"]');
+    assert.ok(!redundant.test(await evaluate('document.getElementById("modal").innerText')));
+    await click('[data-act="storage"]'); var storage = await evaluate('document.getElementById("modal").innerText');
+    assert.ok(storage.includes('导入将覆盖当前存档')); assert.ok(storage.includes('最大 2 MB')); assert.ok(!redundant.test(storage));
+    await click('[data-act="close"]');
+  });
   await test('桌面默认动效与配乐、设置独立控制', async function () {
     await metrics(1440, 900, false); await navigate('round');
     assert.equal(await evaluate('BT.app.ui.layout.mode'), 'desktop');

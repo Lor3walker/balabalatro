@@ -68,13 +68,17 @@ test('同种子开局完全可复现', function () { eq(JSON.stringify(game('err
 test('献祭可用于两张手牌，但不触发玻璃小丑成长', function () { var g = round(game()), a = card(g, 2, 'S', { enh: 'glass' }), b = card(g, 3, 'H', { enh: 'glass' }); g.run.hand = [a, b]; g.run.deck.push(a, b); var j = joker(g, 'glass_joker'), c = g.createConsumable('spectral', { key: 'immolate' }); assert.ok(g.canUse(c, [], false)); g.use(c.id); eq(j.ab.x, 1); eq(g.run.deck.indexOf(a), -1); assert.ok(g.run.hand.length > 0); eq(g.run.money, 24); });
 test('摧毁最后一张手牌不造成交互死锁', function () { var g = round(game()), c = g.run.hand[0]; g.run.hand = [c]; var t = g.createConsumable('tarot', { key: 'hanged_man' }); g.use(t.id, [c.id]); assert.ok(g.run.hand.length || g.run.phase !== 'round'); });
 test('视觉场景不覆盖玩家的正式存档', function () { var saved = game(); var before = JSON.stringify(saved.serialize()), demo = new BT.Game(); demo.noSave = true; demo.start({ seed: 'DEMO' }); demo.selectBlind('small'); var restored = new BT.Game(); assert.ok(restored.load()); eq(JSON.stringify(restored.serialize()), before); });
+test('蔚蓝之铃：死神替换强制牌后仍强制选中一张', function () { var g = round(game(), 'cerulean_bell'); g.forceBell(); var forced = g.run.hand.find(function (c) { return c.forced; }), target = g.run.hand.find(function (c) { return c !== forced; }); g.run.hand = [forced, target].concat(g.run.hand.filter(function (c) { return c !== forced && c !== target; })); var t = g.createConsumable('tarot', { key: 'death' }); g.use(t.id, [forced.id, target.id]); eq(g.run.hand.filter(function (c) { return c.forced; }).length, 1); assert.ok(g.run.hand.some(function (c) { return c.forced; })); });
+test('蔚蓝之铃：倒吊人摧毁强制牌后重新强制现有手牌', function () { var g = round(game(), 'cerulean_bell'); g.forceBell(); var forced = g.run.hand.find(function (c) { return c.forced; }), t = g.createConsumable('tarot', { key: 'hanged_man' }); g.use(t.id, [forced.id]); eq(g.run.hand.filter(function (c) { return c.forced; }).length, 1); eq(g.run.deck.indexOf(forced), -1); });
 D.BOSSES.forEach(function (def) {
   test('Boss 实际初始化与禁用：' + def.key, function () {
     var g = game(); joker(g, 'joker'); joker(g, 'jolly_joker'); g.run.blinds.small.state = 'skipped'; g.run.blinds.big.state = 'skipped'; g.run.blinds.boss.state = 'next'; g.run.blinds.boss.key = def.key; g.selectBlind('boss');
     if (def.key === 'water') eq(g.run.round.discardsLeft, 0); if (def.key === 'needle') eq(g.run.round.handsLeft, 1); if (def.key === 'manacle') eq(g.run.hand.length, 7);
     if (def.key === 'crimson_heart') eq(g.run.jokers.filter(function (j) { return j.debuff; }).length, 1);
     if (def.key === 'cerulean_bell') eq(g.run.hand.filter(function (c) { return c.forced; }).length, 1);
-    g.disableBlind(); eq(g.run.blind.disabled, true); eq(g.run.round.handsLeft, 4); eq(g.run.round.discardsLeft, 4); eq(g.handSize(), 8);
+    if (def.key === 'amber_acorn') assert.ok(g.run.jokers.every(function (j) { return j.flipped; }));
+    g.disableBlind(); eq(g.run.blind.disabled, true);
+    if (def.key === 'amber_acorn') assert.ok(g.run.jokers.every(function (j) { return !j.flipped; })); eq(g.run.round.handsLeft, 4); eq(g.run.round.discardsLeft, 4); eq(g.handSize(), 8);
   });
 });
 BT.Jokers.LIST.forEach(function (def) {

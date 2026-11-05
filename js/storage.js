@@ -21,7 +21,8 @@
       if (!record(r) || r.version !== 1 || !cleanTree(r, 0) || JSON.stringify(r).length > MAX_BYTES) return false;
       if (!known(D.DECK, r.deckKey) || !Number.isInteger(r.stake) || r.stake < 1 || r.stake > 8 || !Number.isInteger(r.ante) || !count(r.roundNumber) || !finite(r.money) || typeof r.seed !== 'string' || r.seed.length > 64) return false;
       if (['blind_select', 'round', 'cash_out', 'shop', 'pack', 'game_over', 'won'].indexOf(r.phase) < 0 || !count(r.rng) || r.rng > 0xffffffff || !count(r.nextId) || !count(r.startDeckSize)) return false;
-      if (!record(r.base) || !record(r.mods) || !record(r.rates) || !record(r.round) || !record(r.stats) || !record(r.flags) || !record(r.vouchers) || !record(r.hands) || !record(r.current)) return false;
+      if (!record(r.base) || !record(r.mods) || !record(r.rates) || !record(r.round) || !record(r.stats) || !record(r.flags) || !record(r.vouchers) || !record(r.hands) || !record(r.current) || !record(r.bossUsed)) return false;
+      if (!Object.keys(r.bossUsed).every(function (k) { return known(D.BOSS, k) && count(r.bossUsed[k]); })) return false;
       var scalars = ['editionRate', 'discount', 'rerollBase', 'shopSlots', 'interestCap'];
       if (!scalars.every(function (k) { return finite(r[k]); }) || !count(r.shopSlots) || r.shopSlots > 10000 || r.discount < 0 || r.discount > 100) return false;
       if (!['hands', 'discards', 'handSize', 'jokerSlots', 'consSlots'].every(function (k) { return finite(r.base[k]); }) || !['handSize', 'ecto', 'juggle'].every(function (k) { return finite(r.mods[k]); })) return false;
