@@ -2,12 +2,15 @@
 (function (BT) {
   'use strict';
   var U = BT.Utils, D = BT.Data, J = BT.Jokers.BY, $ = function (id) { return document.getElementById(id); };
-  function button(act, label, cls, disabled, value) { return '<button data-act="' + act + '"' + (value === undefined ? '' : ' data-value="' + U.esc(value) + '"') + ' class="' + (cls || '') + '"' + (disabled ? ' disabled' : '') + '>' + label + '</button>'; }
+  function button(act, label, cls, disabled, value) { return '<button' + (act === 'sort-rank' ? ' title="点数从左至右：A、K、Q、J、10 至 2"' : '') + ' data-act="' + act + '"' + (value === undefined ? '' : ' data-value="' + U.esc(value) + '"') + ' class="' + (cls || '') + '"' + (disabled ? ' disabled' : '') + '>' + label + '</button>'; }
   function UI(g) {
     this.g = g; this.view = null; this.nodes = new Map(); this.selected = []; this.activeId = null; this.busy = false; this.menuOpen = true; this.deckIndex = 0;
     this.motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    this.settings = Object.assign({ speed: 2, crt: true, reduced: false, respectSystem: true }, U.load('bt-settings-v2', {}));
-    if ([0.5, 1, 2, 4].indexOf(this.settings.speed) < 0) this.settings.speed = 2;
+    var savedSettings = U.load('bt-settings-v2', {}) || {};
+    this.settings = Object.assign({ speed: 1, crt: true, reduced: false, respectSystem: true }, savedSettings);
+    if (savedSettings.pacingVersion !== 3) this.settings.speed = 1;
+    this.settings.pacingVersion = 3;
+    if ([0.5, 1, 2, 4].indexOf(this.settings.speed) < 0) this.settings.speed = 1;
     ['crt', 'reduced', 'respectSystem'].forEach(function (k) { this.settings[k] = !!this.settings[k]; }, this);
     this.catalogGame = new BT.Game(); this.catalogGame.save = function () {}; this.catalogGame.start({ seed: 'COLLECT', deck: 'red' });
     var self = this; g.onStateChange = function (events) { self.changed(events); };
@@ -31,11 +34,16 @@
   P.updateLayout = function () {
     var compact = window.innerWidth < 1116; document.body.classList.toggle('compact-view', compact);
     var padding = window.getComputedStyle(document.body), width = document.documentElement.clientWidth - parseFloat(padding.paddingLeft || 0) - parseFloat(padding.paddingRight || 0);
-    this.layout = BT.Layout.compute(width, window.innerHeight, this.menuOpen ? null : this.view);
+    var viewport = window.visualViewport, visibleHeight = viewport && viewport.scale === 1 ? Math.min(window.innerHeight, viewport.height) : window.innerHeight;
+    var height = visibleHeight - parseFloat(padding.paddingTop || 0) - parseFloat(padding.paddingBottom || 0);
+    this.layout = BT.Layout.compute(width, height, this.menuOpen ? null : this.view);
+    document.body.classList.toggle('landscape-view', this.layout.mode === 'landscape');
     var l = this.layout, root = document.documentElement.style;
     root.setProperty('--layout-width', l.width + 'px'); root.setProperty('--layout-height', l.height + 'px');
     root.setProperty('--scale', l.mode === 'desktop' ? Math.min((window.innerWidth - 16) / 1600, (window.innerHeight - 16) / 900) : 1);
-    $('stage').classList.toggle('portrait-layout', l.mode === 'portrait'); $('stage').classList.toggle('compact-layout', l.mode === 'compact');
+    $('stage').classList.toggle('portrait-layout', l.mode === 'portrait'); $('stage').classList.toggle('compact-layout', l.mode === 'compact'); $('stage').classList.toggle('landscape-layout', l.mode === 'landscape');
+    root.setProperty('--table-left', (l.mode === 'landscape' ? 192 : l.mode === 'portrait' ? 12 : 220) + 'px');
+    root.setProperty('--visible-height', visibleHeight + 'px');
     $('stage').dataset.phase = this.menuOpen ? 'menu' : this.view && this.view.phase || 'menu';
     $('center').style.top = l.centerY + 'px'; $('center').style.height = l.centerHeight + 'px';
   };
@@ -54,11 +62,11 @@
   };
   P.tooltipHTML = function (c) {
     var extra = [], def = c.kind === 'joker' ? J[c.key] : c.kind === 'planet' ? D.PLANET[c.key] : c.kind === 'tarot' ? D.TAROT[c.key] : c.kind === 'spectral' ? D.SPECTRAL[c.key] : c.kind === 'voucher' ? D.VOUCHER[c.key] : null;
+    var rarity = c.kind === 'joker' ? '<div class="rarity-strip rarity-' + def.rarity + '"><span>' + ['普通', '罕见', '稀有', '传奇'][def.rarity - 1] + '</span></div>' : '';
     if (c.edition) extra.push(D.EDITION[c.edition].zh + ' · ' + D.EDITION[c.edition].desc);
     if (c.seal) extra.push(D.SEAL[c.seal].zh + ' · ' + D.SEAL[c.seal].desc);
     if (c.eternal) extra.push('永恒：无法出售或摧毁'); if (c.perishable) extra.push('易腐：剩余 ' + c.perishLeft + ' 回合'); if (c.rental) extra.push('租用：每回合结束失去 $3');
-    if (c.kind === 'joker') extra.push(['普通', '罕见', '稀有', '传奇'][def.rarity - 1]);
-    return '<h3>' + U.esc(this.cardName(c)) + '</h3><div class="en">' + U.esc(def ? def.en : c.kind === 'playing' ? D.SUIT[c.suit].en : '') + '</div><div class="description">' + U.rich(this.description(c)) + '</div>' + (extra.length ? '<div class="tip-detail">' + U.rich(extra.join('\n')) + '</div>' : '');
+    return rarity + '<h3>' + U.esc(this.cardName(c)) + '</h3><div class="en">' + U.esc(def ? def.en : c.kind === 'playing' ? D.SUIT[c.suit].en : '') + '</div><div class="description">' + U.rich(this.description(c)) + '</div>' + (extra.length ? '<div class="tip-detail">' + U.rich(extra.join('\n')) + '</div>' : '');
   };
   P.hover = function (e) {
     if (this.busy || this.drag || e.pointerType === 'touch' || !$('modal').hidden || this.menuOpen) return;
@@ -90,8 +98,8 @@
     var self = this;
     function slots(n, span) {
       var a = span === 105 ? self.layout.jokers : self.layout.cons, desktop = self.layout.mode === 'desktop', portrait = self.layout.mode === 'portrait';
-      var baseX = desktop ? (span === 105 ? 354 : 1179) : portrait ? 12 : span === 105 ? 220 : a.x;
-      var baseY = desktop ? 101 : portrait ? (span === 105 ? 238 : 364) : 74;
+      var baseX = desktop ? (span === 105 ? 354 : 1179) : portrait ? 12 : span === 105 ? (self.layout.mode === 'landscape' ? 192 : 220) : a.x;
+      var baseY = desktop ? 101 : portrait ? (span === 105 ? 238 : 364) : self.layout.mode === 'landscape' ? 49 : 74;
       var step = Math.min(a.cardW + 15, (a.width - a.cardW) / Math.max(1, n - 1)), start = a.x - baseX + (a.width - (step * Math.max(0, n - 1) + a.cardW)) / 2, html = '';
       for (var i = 0; i < Math.min(n, 12); i++) html += '<div class="slot" style="left:' + (start + i * step) + 'px;top:' + (a.y - baseY) + 'px;width:' + a.cardW + 'px;height:' + (a.cardW * 1.4) + 'px">✧</div>';
       return html;
@@ -122,6 +130,7 @@
     if (r.hand.length && !this.busy && (phase === 'round' || phase === 'pack')) bar += '<div class="sort-actions"><span class="quiet">' + r.hand.length + ' / ' + g.handSize() + ' 张手牌</span>' + button('sort-rank', '点数 R', 'small flat') + button('sort-suit', '花色 S', 'small flat') + '</div>';
     if (phase === 'round') bar += '<div class="deck-control">' + button('deck', '<div class="deck-back"></div><span class="deck-count">' + r.draw.length + ' / ' + r.deck.length + '</span>', 'flat') + '</div>';
     if (phase === 'round' || phase === 'pack') bar += button('hand-details', '选牌详情', 'small flat', !this.selected.length || this.busy);
+    if (this.layout.hideInventory) bar += button('inventory', '小丑 / 消耗牌', 'small flat', this.busy);
     $('handbar').innerHTML = bar;
   };
   P.layoutCards = function () {
@@ -198,6 +207,8 @@
       case 'unfocus': this.activeId = null; this.inventoryActions(); break;
       case 'options': this.options(); break;
       case 'hand-details': this.cardDetails(this.selected[this.selected.length - 1]); break;
+      case 'inventory': this.inventoryPanel(); break;
+      case 'owned-card': this.closeModal(); this.activeId = Number(value); this.inventoryActions(); break;
       case 'detail-select': this.closeModal(); this.toggleCard(Number(value), 'hand'); break;
       case 'storage': this.storagePanel(); break;
       case 'export-save': this.exportSave(); break;
@@ -219,30 +230,119 @@
   };
   P.changed = async function (events) {
     try {
-      if (events.some(function (e) { return e.type === 'score'; }) && !this.isReduced()) await this.animate(events);
-      else { if (events.some(function (e) { return e.type === 'money'; })) BT.Audio.play('money'); this.render(); }
+      var score = events.some(function (e) { return e.type === 'score'; });
+      var level = events.some(function (e) { return e.type === 'level'; });
+      var roundMotion = this.view && this.view.phase === 'round' && events.some(function (e) { return e.type === 'discard_cards' || e.type === 'draw_cards'; });
+      if (!this.isReduced() && score) await this.animate(events);
+      else if (!this.isReduced() && (level || roundMotion)) await this.animateAction(events);
+      else {
+        if (events.some(function (e) { return e.type === 'money'; })) BT.Audio.play('money'); this.render();
+        var lastLevel = events.filter(function (e) { return e.type === 'level'; }).pop(), finalScore = events.filter(function (e) { return e.type === 'score'; }).pop();
+        if (finalScore && finalScore.cleared) this.toast('盲注击破 · ' + U.fmt(finalScore.total) + ' 分');
+        else if (lastLevel) this.toast(D.HAND[lastLevel.hand].zh + '升至等级 ' + lastLevel.level);
+      }
     } catch (e) { console.error('界面事件回放失败', e); this.busy = false; this.render(); this.toast('动画已恢复，请继续游戏'); }
   };
-  P.animate = async function (events) {
-    var self = this; this.busy = true; this.selected = []; $('tooltip').hidden = true;
-    var view = U.clone(this.view || this.g.run); view.phase = 'round'; this.view = view; this.renderPanels();
-    var speed = this.settings.speed, wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms / speed); }); }, n = 0;
+  P.applyZonesEvent = function (e, view) {
+    var by = {}; e.cards.forEach(function (c) { by[c.id] = c; });
+    ['hand', 'play', 'jokers', 'cons'].forEach(function (z) { view[z] = e[z].map(function (id) { return by[id]; }); });
+    this.view = view; this.updateLayout(); this.layoutCards();
+  };
+  P.animateDiscard = async function (e, wait) {
+    var self = this; e.ids.forEach(function (id, i) { var node = self.nodes.get(id); if (node) { node.style.setProperty('--throw-x', ((i - (e.ids.length - 1) / 2) * 42) + 'px'); node.classList.add('discarding'); } });
+    BT.Audio.play('card'); await wait(e.hook ? 190 : 270);
+  };
+  P.animateDraw = async function (e, wait) {
+    var self = this; e.ids.forEach(function (id, i) { var node = self.nodes.get(id); if (node) { node.style.animationDelay = (i * 28) + 'ms'; node.classList.add('drawing'); } });
+    BT.Audio.play('card'); await wait(250 + e.ids.length * 24);
+    e.ids.forEach(function (id) { var node = self.nodes.get(id); if (node) { node.classList.remove('drawing'); node.style.animationDelay = ''; } });
+  };
+  P.levelBurst = function (e) {
+    var def = D.HAND[e.hand], node = document.createElement('div'), source = this.nodes.get(e.src), up = e.amount >= 0;
+    if (source) { source.classList.remove('pulse'); void source.offsetWidth; source.classList.add('pulse'); }
+    if ($('hand-name')) $('hand-name').textContent = def.zh + ' · 等级 ' + e.level;
+    if ($('chips-value')) $('chips-value').textContent = U.fmt(e.chips);
+    if ($('mult-value')) $('mult-value').textContent = U.fmt(e.mult);
+    node.className = 'level-burst ' + (up ? 'level-up' : 'level-down');
+    node.innerHTML = '<span class="level-kicker">' + (up ? '牌型升级' : '牌型降级') + '</span><strong>' + def.zh + '</strong><span>等级 ' + e.level + '　' + U.fmt(e.chips) + ' 筹码 × ' + U.fmt(e.mult) + ' 倍率</span>';
+    $('floating').appendChild(node); BT.Audio.play('score'); setTimeout(function () { node.remove(); }, 2200);
+  };
+  P.previewScore = function (chips, mult, previous, target) {
+    if (!Number.isFinite(chips) || !Number.isFinite(mult)) return;
+    if ($('chips-value')) $('chips-value').textContent = U.fmt(chips);
+    if ($('mult-value')) $('mult-value').textContent = U.fmt(mult);
+    var total = previous + Math.max(0, Math.floor(chips * mult));
+    if ($('round-total')) { $('round-total').textContent = U.fmt(total); $('round-total').classList.remove('tally-pop'); void $('round-total').offsetWidth; $('round-total').classList.add('tally-pop'); }
+    if ($('score-progress') && target) $('score-progress').style.width = U.clamp(total / target * 100, 0, 100) + '%';
+  };
+  P.blindClearBurst = function (e) {
+    var node = document.createElement('div'), particles = '', colors = ['#e9bc67', '#559fc9', '#e57c67', '#8fd3b4'];
+    for (var i = 0; i < 22; i++) particles += '<i style="--a:' + (i * 16.36) + 'deg;--d:' + (i * 18) + 'ms;--c:' + colors[i % colors.length] + '"></i>';
+    node.className = 'blind-clear'; node.innerHTML = '<div class="clear-ring"></div><strong>盲注击破</strong><span>超出 ' + U.fmt(Math.max(0, e.total - e.target)) + ' 分</span><div class="clear-particles">' + particles + '</div>';
+    $('floating').appendChild(node); $('stage').classList.add('blind-cleared');
+    setTimeout(function () { node.remove(); $('stage').classList.remove('blind-cleared'); }, 2200);
+  };
+  P.animateAction = async function (events) {
+    this.busy = true; $('tooltip').hidden = true; var view = U.clone(this.view || this.g.run), speed = this.settings.speed;
+    var wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms / speed); }); };
     for (var i = 0; i < events.length; i++) {
       var e = events[i];
-      if (e.type === 'zones') { var by = {}; e.cards.forEach(function (c) { by[c.id] = c; }); ['hand', 'play', 'jokers', 'cons'].forEach(function (z) { view[z] = e[z].map(function (id) { return by[id]; }); }); this.layoutCards(); await wait(110); }
-      if (e.type === 'base') { $('hand-name').textContent = (e.royal ? '皇家同花顺' : D.HAND[e.hand].zh) + ' · 等级 ' + this.g.run.hands[e.hand].level; }
-      if (e.chips !== undefined && $('chips-value')) { $('chips-value').textContent = U.fmt(e.chips); $('mult-value').textContent = U.fmt(e.mult); }
-      if (['chips', 'mult', 'xmult', 'hmult', 'message', 'retrigger', 'money', 'level'].indexOf(e.type) >= 0) {
-        var node = this.nodes.get(e.src); if (node) { node.classList.remove('pulse'); void node.offsetWidth; node.classList.add('pulse'); }
-        var text = e.type === 'message' ? e.text : e.type === 'retrigger' ? '再触发！' : e.type === 'money' ? (e.amount > 0 ? '+' : '') + '$' + e.amount : e.type === 'level' ? '等级 ↑' : (e.type === 'xmult' ? 'X' : '+') + U.fmtX(e.amount);
-        this.float(text, e.src, e.type); if (e.type === 'money') $('money-value').textContent = '$' + U.fmt(e.money);
-        BT.Audio.play(e.type === 'chips' ? 'chip' : e.type === 'money' ? 'money' : 'mult', n++); await wait(e.quiet ? 50 : 170);
-      }
-      if (e.type === 'score') { $('round-total').textContent = U.fmt(e.total); $('score-progress').style.width = U.clamp(e.total / view.blind.chips * 100, 0, 100) + '%'; this.float(U.fmt(e.score) + ' 分', null, 'score'); BT.Audio.play('score'); await wait(750); }
+      if (e.type === 'discard_cards') await this.animateDiscard(e, wait);
+      else if (e.type === 'level') { this.levelBurst(e); await wait(950); }
+      else if (e.type === 'zones') { this.applyZonesEvent(e, view); await wait(80); }
+      else if (e.type === 'draw_cards') await this.animateDraw(e, wait);
+      else if (e.type === 'money') { if ($('money-value')) $('money-value').textContent = '$' + U.fmt(e.money); BT.Audio.play('money'); await wait(120); }
     }
     this.busy = false; this.render();
   };
+  P.scorePhase = function (text) {
+    var node = $('score-phase'); if (!node) { node = document.createElement('div'); node.id = 'score-phase'; node.className = 'score-phase'; $('floating').appendChild(node); }
+    node.textContent = text;
+  };
+  P.multImpact = function (e) {
+    var value = $('mult-value'); if (value) { value.classList.remove('mult-impact'); void value.offsetWidth; value.classList.add('mult-impact'); }
+    var n = document.createElement('div'); n.className = 'mult-stamp'; n.textContent = 'X' + U.fmtX(e.amount); $('floating').appendChild(n); setTimeout(function () { n.remove(); }, 1000);
+  };
+  P.animate = async function (events) {
+    this.busy = true; this.selected = []; $('tooltip').hidden = true;
+    var view = U.clone(this.view || this.g.run); view.phase = 'round'; this.view = view; this.renderPanels();
+    var speed = this.settings.speed, previous = view.round.chips, target = view.blind.chips, beat = 0, cardIndex = 0;
+    var scoringCount = events.filter(function (e) { return e.type === 'card_start'; }).length;
+    var wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms / speed); }); };
+    var pace = function (base) { return Math.max(160, base * Math.pow(0.97, beat++)); }; this.scorePhase('准备计分');
+    for (var i = 0; i < events.length; i++) {
+      var e = events[i], node;
+      if (e.type === 'discard_cards') { await this.animateDiscard(e, wait); continue; }
+      if (e.type === 'zones') { this.applyZonesEvent(e, view); await wait(85); continue; }
+      if (e.type === 'draw_cards') { await this.animateDraw(e, wait); continue; }
+      if (e.type === 'level') { this.levelBurst(e); await wait(760); continue; }
+      if (e.type === 'base') { $('hand-name').textContent = (e.royal ? '皇家同花顺' : D.HAND[e.hand].zh) + ' · 等级 ' + this.g.run.hands[e.hand].level; this.previewScore(e.chips, e.mult, previous, target); await wait(480); continue; }
+      if (e.type === 'card_start') { this.scorePhase('纸牌计分 · ' + (++cardIndex) + ' / ' + scoringCount); node = this.nodes.get(e.card); if (node) node.classList.add('scoring'); await wait(pace(340)); continue; }
+      if (e.type === 'card_end') { node = this.nodes.get(e.card); if (node) node.classList.remove('scoring'); this.previewScore(e.chips, e.mult, previous, target); await wait(pace(290)); continue; }
+      if (e.type === 'score_phase') { this.scorePhase(e.label); beat = 0; await wait(340); continue; }
+      if (e.type === 'balance') { this.previewScore(e.chips, e.mult, previous, target); this.float('平衡', null, 'chips'); await wait(pace(190)); continue; }
+      if (['chips', 'mult', 'xmult', 'hmult', 'message', 'retrigger', 'money'].indexOf(e.type) >= 0) {
+        node = this.nodes.get(e.src); if (node) { node.classList.remove('pulse'); void node.offsetWidth; node.classList.add('pulse'); }
+        var text = e.type === 'message' ? e.text : e.type === 'retrigger' ? '再触发！' : e.type === 'money' ? (e.amount > 0 ? '+' : '') + '$' + e.amount : (e.type === 'xmult' ? 'X' : '+') + U.fmtX(e.amount);
+        this.float(text, e.src, e.type); if (e.type === 'money' && $('money-value')) $('money-value').textContent = '$' + U.fmt(e.money);
+        if (e.chips !== undefined) this.previewScore(e.chips, e.mult, previous, target);
+        if (e.type === 'xmult') this.multImpact(e);
+        BT.Audio.play(e.type === 'chips' ? 'chip' : e.type === 'money' ? 'money' : 'mult', beat); await wait(e.type === 'xmult' ? Math.max(360, pace(580)) : e.type === 'retrigger' ? pace(360) : e.quiet ? 130 : pace(320)); continue;
+      }
+      if (e.type === 'score') {
+        this.scorePhase('本手得分 · ' + U.fmt(e.score)); await wait(550);
+        $('round-total').textContent = U.fmt(e.total); $('score-progress').style.width = (Number.isFinite(e.target) && e.target > 0 ? U.clamp(e.total / e.target * 100, 0, 100) : 0) + '%';
+        this.float(U.fmt(e.score) + ' 分', null, 'score'); BT.Audio.play('score'); if (e.cleared) this.blindClearBurst(e); await wait(e.cleared ? 1650 : 950);
+      }
+    }
+    if ($('score-phase')) $('score-phase').remove();
+    this.busy = false; this.render();
+  };
   P.float = function (text, id, type) { var p = this.positions && this.positions[id], n = document.createElement('div'); n.className = 'score-float'; n.textContent = text; n.style.left = U.clamp(p ? p.x + p.w / 2 - 25 : this.layout.play.x + this.layout.play.width / 2 - 70, 12, this.layout.width - 150) + 'px'; n.style.top = (p ? p.y - 15 : this.layout.play.y + 30) + 'px'; n.style.color = type === 'chips' ? 'var(--blue)' : type === 'money' || type === 'score' ? 'var(--gold)' : 'var(--red)'; $('floating').appendChild(n); setTimeout(function () { n.remove(); }, 1000); };
+  P.inventoryPanel = function () {
+    var r = this.g.run, self = this;
+    this.openModal('小丑与消耗牌', '<div class="inventory-grid">' + r.jokers.concat(r.cons).map(function (c) { return '<button class="inventory-item" data-act="owned-card" data-value="' + c.id + '"><img alt="" src="' + BT.Art.image(c, c.flipped) + '"><span>' + (c.flipped ? '背面朝上' : U.esc(self.cardName(c))) + '</span></button>'; }).join('') + '</div>');
+  };
   P.cardDetails = function (id) {
     var c = this.findCard(id); if (!c || c.flipped) { this.toast('背面朝上的牌无法查看'); return; }
     var selected = this.selected.indexOf(id) >= 0, hand = this.g.run.hand.indexOf(c) >= 0;

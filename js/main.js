@@ -3,8 +3,9 @@
   'use strict';
   var g = new BT.Game(), ui = new BT.UI(g); BT.app = { game: g, ui: ui };
   var resizeTimer;
-  window.addEventListener('resize', function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(function () { ui.reflow(); last = -1; }, 80); });
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', function () { last = -1; });
+  function resize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(function () { ui.reflow(); last = -1; }, 80); }
+  window.addEventListener('resize', resize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
   document.addEventListener('pointerdown', function () { BT.Audio.unlock(); }, { passive: true });
   document.addEventListener('keydown', function () { BT.Audio.unlock(); });
   BT.Background.init(document.getElementById('background'));

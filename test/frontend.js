@@ -26,6 +26,7 @@ function mockAudio() {
     });
   });
 });
+[350, 390, 440].forEach(function (h) { test('iPhone 横屏 ' + h + ' 高度内放下牌桌', function () { var g=H.round(H.game()), l=BT.Layout.compute(838,h-21,g.run), p=BT.Layout.positions(g.run,l,g.jokerSlots(),g.consSlots()); assert.equal(l.mode,'landscape'); assert.equal(l.height,h-21); Object.values(p).forEach(function (c) { assert.ok(c.x>=0 && c.x+c.w<=l.width); assert.ok(c.y>=0 && c.y+c.w*1.4<=l.height-l.actionsHeight); }); }); });
 test('导出导入往返保持对象身份与随机数状态', function () {
   var g = H.round(H.game()), data = g.serialize(), backup = BT.Storage.exportRun(data), restored = new BT.Game();
   assert.equal(BT.Storage.status().cloud, 'disabled'); assert.ok(restored.restore(BT.Storage.importRun(backup)));

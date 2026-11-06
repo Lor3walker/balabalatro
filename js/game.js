@@ -145,7 +145,7 @@ window.BT = window.BT || {};
     if (!key || !D.HAND[key]) return;
     var h = this.run.hands[key], def = D.HAND[key]; amount = amount === undefined ? 1 : amount;
     h.level = Math.max(1, h.level + amount); h.chips = Math.max(1, def.chips + def.lc * (h.level - 1)); h.mult = Math.max(1, def.mult + def.lm * (h.level - 1));
-    this.emit('level', { hand: key, level: h.level, src: src && src.id });
+    this.emit('level', { hand: key, level: h.level, amount: amount, chips: h.chips, mult: h.mult, src: src && src.id });
   };
   /* 不同时机的筹码/倍率应用顺序不同；绝不把 X 倍率合并到最终一步。 */
   P.effect = function (res, src, ctx, order) {
@@ -248,21 +248,23 @@ window.BT = window.BT || {};
     r.jokers.forEach(function (j) { j.debuff = false; }); (this.rng.pick(pool.length ? pool : r.jokers)).debuff = true;
   };
   P.drawCards = function (first, exact, afterPlay) {
-    var r = this.run, n = exact === undefined ? Math.max(0, this.handSize() - r.hand.length) : exact;
+    var r = this.run, drawn = [], n = exact === undefined ? Math.max(0, this.handSize() - r.hand.length) : exact;
     if (exact === undefined && this.bossActive('serpent') && !first) n = 3;
     n = Math.min(n, r.draw.length);
     for (var i = 0; i < n; i++) {
       var c = r.draw.pop(); c.forced = false;
       c.flipped = this.bossActive('house') && first || this.bossActive('wheel') && this.chance(7) || this.bossActive('mark') && this.isFace(c, true) || this.bossActive('fish') && !!afterPlay;
-      r.hand.push(c);
+      r.hand.push(c); drawn.push(c.id);
     }
     this.sortHand(); this.forceBell(); this.zones();
+    if (drawn.length) this.emit('draw_cards', { ids: drawn, first: !!first, afterPlay: !!afterPlay });
   };
   P.selected = function (ids) { return this.run.hand.filter(function (c) { return ids.indexOf(c.id) >= 0; }); };
   P.validSelection = function (ids) { var r = this.run, cards = this.selected(ids); return cards.length >= 1 && cards.length <= 5 && r.hand.every(function (c) { return !c.forced || ids.indexOf(c.id) >= 0; }); };
   P.preview = function (ids) { return BT.Poker.info(this.selected(ids), this); };
   P.discardCards = function (cards, hook) {
-    var r = this.run, g = this, ctx = { type: 'pre_discard', full: cards, hook: !!hook }; this.context(ctx);
+    var r = this.run, g = this, ctx = { type: 'pre_discard', full: cards, hook: !!hook };
+    this.emit('discard_cards', { ids: cards.map(function (c) { return c.id; }), hook: !!hook }); this.context(ctx);
     var removed = [];
     cards.forEach(function (c) {
       c.flipped = false; c.forced = false;
@@ -348,7 +350,7 @@ window.BT = window.BT || {};
     var blocked = this.debuffHand(cards, hand);
     if (blocked) {
       this.emit('message', { text: '牌型被 Boss 禁用', color: 'mult' }); this.context(Object.assign({}, ctx, { type: 'debuffed_hand' }));
-      this.emit('score', { hand: hand, score: 0, total: r.round.chips, chips: 0, mult: 0 });
+      this.emit('score', { hand: hand, score: 0, previous: r.round.chips, total: r.round.chips, target: r.blind.chips, cleared: false, chips: 0, mult: 0 });
       return 0;
     }
     this.context(Object.assign({}, ctx, { type: 'before' })); this.zones();
@@ -356,16 +358,20 @@ window.BT = window.BT || {};
     if (this.bossActive('flint')) { this.tally.chips = Math.max(1, Math.floor(this.tally.chips / 2 + 0.5)); this.tally.mult = Math.max(1, Math.floor(this.tally.mult / 2 + 0.5)); r.blind.triggered = true; }
     this.emit('base', { hand: hand, royal: info.royal, chips: this.tally.chips, mult: this.tally.mult });
     scoring.forEach(function (c) {
-      if (g.cardDebuffed(c)) { r.blind.triggered = true; g.emit('message', { text: '已削弱', src: c.id, color: 'dim' }); return; }
+      g.emit('card_start', { card: c.id });
+      if (g.cardDebuffed(c)) { r.blind.triggered = true; g.emit('message', { text: '已削弱', src: c.id, color: 'dim' }); g.emit('card_end', { card: c.id, chips: g.tally.chips, mult: g.tally.mult }); return; }
       var reps = g.repetitions(Object.assign({}, ctx, { type: 'rep_play', card: c }), c, true);
       g.playCard(c, ctx);
       reps.forEach(function (src) { g.emit('retrigger', { src: src.id, card: c.id }); g.playCard(c, ctx); });
+      g.emit('card_end', { card: c.id, chips: g.tally.chips, mult: g.tally.mult });
     });
+    this.emit('score_phase', { label: '手牌能力' });
     r.hand.slice().forEach(function (c) {
       var active = g.heldCard(c, ctx, false);
       var reps = g.repetitions(Object.assign({}, ctx, { type: 'rep_held', card: c, hasEffect: active }), c, active);
       reps.forEach(function (src) { g.emit('retrigger', { src: src.id, card: c.id }); g.heldCard(c, ctx, false); });
     });
+    this.emit('score_phase', { label: '小丑结算' });
     r.jokers.concat(r.cons).slice().forEach(function (j) {
       if (j.kind === 'joker' && (g.jokerDebuffed(j) || r.jokers.indexOf(j) < 0)) return;
       if (j.edition === 'foil') g.effect({ chips: 50 }, j, ctx);
@@ -384,8 +390,8 @@ window.BT = window.BT || {};
       if (res.some(function (e) { return e.destroy; }) || (c.enh === 'glass' && !g.cardDebuffed(c) && g.chance(4))) removed.push(c);
     });
     if (removed.length) this.removePlayingCards(removed);
-    var score = Math.floor(this.tally.chips * this.tally.mult); r.round.chips += score; r.stats.best = Math.max(r.stats.best, score);
-    this.emit('score', { hand: hand, score: score, total: r.round.chips, chips: this.tally.chips, mult: this.tally.mult });
+    var score = Math.floor(this.tally.chips * this.tally.mult), previous = r.round.chips; r.round.chips += score; r.stats.best = Math.max(r.stats.best, score);
+    this.emit('score', { hand: hand, score: score, previous: previous, total: r.round.chips, target: r.blind.chips, cleared: previous < r.blind.chips && r.round.chips >= r.blind.chips, chips: this.tally.chips, mult: this.tally.mult });
     this.tally = null; this.context(Object.assign({}, ctx, { type: 'after' })); return score;
   };
   P.endRound = function () {

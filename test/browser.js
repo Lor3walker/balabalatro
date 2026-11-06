@@ -11,10 +11,10 @@ async function evaluate(expression) {
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.text + ' ' + JSON.stringify(result.exceptionDetails.exception));
   return result.result.value;
 }
-async function wait(expression) { for (var i = 0; i < 120; i++) { if (await evaluate(expression)) return; await delay(50); } throw new Error('等待失败：' + expression); }
+async function wait(expression) { for (var i = 0; i < 600; i++) { if (await evaluate(expression)) return; await delay(50); } throw new Error('等待失败：' + expression); }
 async function navigate(scene, single) {
   await command('Page.navigate', { url: URL_BASE + '/' + (single ? 'dist/balabalatro.html' : 'index.html') + '?scene=' + (scene || 'menu') + '&test=' + Date.now() });
-  await wait('!!(window.BT && BT.app && BT.app.ui.layout)'); await delay(160);
+  await wait('!!(window.BT && BT.app && BT.app.ui.layout)'); await delay(160); await wait('!BT.app.ui.busy');
 }
 async function metrics(w, h, mobile) { await command('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: !!mobile }); await command('Emulation.setTouchEmulationEnabled', { enabled: !!mobile, maxTouchPoints: 1 }); }
 async function click(selector, touch) {
@@ -92,6 +92,29 @@ async function main() {
     await command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await delay(200);
     var after = await evaluate('BT.app.game.run.hand.map(c=>c.id)'); assert.equal(after[after.length - 1], before[0]); assert.equal(await evaluate('BT.app.ui.drag'), null);
   });
+  await test('烧焦小丑弃牌升级、弃牌与补牌动画可见', async function () {
+    await metrics(1440, 900, false); await navigate('round');
+    await evaluate('(function(){var g=BT.app.game,u=BT.app.ui;g.run.jokers=[];g.createJoker({key:"burnt_joker",edition:null,force:true});var a=g.run.hand[0],b=g.run.hand[1];a.rank=9;b.rank=9;u.settings.speed=1;u.selected=[a.id,b.id];u.render();})()');
+    await click('[data-act="discard"]'); await wait('!!document.querySelector(".card.discarding")');
+    await wait('!!document.querySelector(".level-burst")'); var levelText = await evaluate('document.querySelector(".level-burst").innerText');
+    assert.ok(levelText.includes('牌型升级')); assert.ok(levelText.includes('对子')); assert.equal(await evaluate('BT.app.game.run.hands.pair.level'), 2); await delay(320); await screenshot('level-burst');
+    await wait('!!document.querySelector(".card.drawing")'); await wait('!BT.app.ui.busy');
+  });
+  await test('小丑注释按四档稀有度显示醒目色条', async function () {
+    await navigate('collection');
+    var cases = [['joker', 1], ['four_fingers', 2], ['blueprint', 3], ['canio', 4]], colors = [];
+    for (var item of cases) { await evaluate('BT.app.ui.collectionDetail(' + JSON.stringify(item[0]) + ')'); assert.equal(await evaluate('!!document.querySelector("#collection-detail .rarity-' + item[1] + '")'), true); colors.push(await evaluate('(function(){var n=document.querySelector("#collection-detail .rarity-' + item[1] + '"),s=getComputedStyle(n);return s.backgroundImage+s.backgroundColor;})()')); }
+    assert.equal(new Set(colors).size, 4); await screenshot('rarity');
+  });
+  await test('逐步计分更新左侧总分并在越过盲注时触发击破效果', async function () {
+    await navigate('round');
+    await evaluate('(function(){var u=BT.app.ui,g=BT.app.game;u.settings.speed=4;g.run.blind.chips=1;window.__scoreTrace=[];new MutationObserver(function(){window.__scoreTrace.push({t:performance.now(),total:document.getElementById("round-total").textContent,scoring:Array.from(document.querySelectorAll(".card.scoring")).map(n=>n.dataset.card)});}).observe(document.getElementById("stage"),{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});})()');
+    await click('[data-act="play"]'); await wait('!!document.querySelector(".blind-clear")');
+    assert.ok((await evaluate('document.querySelector(".blind-clear").innerText')).includes('盲注击破')); await delay(260); await screenshot('blind-clear');
+    await wait('!BT.app.ui.busy'); var trace = await evaluate('window.__scoreTrace');
+    assert.ok(new Set(trace.map(function (x) { return x.total; }).filter(Boolean)).size >= 3);
+    assert.ok(new Set(trace.flatMap(function (x) { return x.scoring; })).size >= 2);
+  });
   await test('手机卡包塔罗增强与底部操作', async function () {
     await navigate('pack'); await click('.card[data-zone="hand"]', true);
     var selected = await evaluate('BT.app.ui.selected[0]'), justice = await evaluate('BT.app.game.run.pack.cards.find(c=>c.key==="justice").id');
@@ -99,11 +122,42 @@ async function main() {
     assert.equal(await evaluate('BT.app.game.run.deck.find(c=>c.id===' + selected + ').enh'), 'glass'); assert.equal(await evaluate('BT.app.game.run.pack.choose'), 1);
   });
   await test('横屏布局、商店真实购买', async function () {
-    await metrics(844, 390, true); await navigate('shop'); assert.equal(await evaluate('BT.app.ui.layout.mode'), 'compact');
+    await metrics(844, 390, true); await navigate('shop'); assert.equal(await evaluate('BT.app.ui.layout.mode'), 'landscape');
     assert.equal(await evaluate('document.documentElement.scrollWidth > innerWidth'), false);
     var id = await evaluate('BT.app.game.run.shop.cards.find(c=>c.kind==="joker").id'), cost = await evaluate('BT.app.game.cost(BT.app.game.run.shop.cards.find(c=>c.id===' + id + '))');
     await click('[data-card="' + id + '"]', true); await click('[data-act="buy"]', true); assert.equal(await evaluate('BT.app.game.run.money'), 45 - cost);
     await screenshot('landscape-shop');
+  });
+  await test('iPhone 横屏含安全区：回合、商店、卡包均为单屏', async function () {
+    for (var size of [[956, 440], [956, 350], [844, 390]]) {
+      await metrics(size[0], size[1], true);
+      for (var scene of ['menu', 'blinds', 'round', 'shop', 'pack', 'cash']) {
+        await navigate(scene);
+        await evaluate('document.body.style.padding="0px 59px 21px 59px";BT.app.ui.reflow()'); await delay(130);
+        assert.equal(await evaluate('BT.app.ui.layout.mode'), 'landscape');
+        var bounds = await evaluate('(function(){var r=document.getElementById("stage").getBoundingClientRect();return {w:innerWidth,h:innerHeight,right:r.right,bottom:r.bottom,scroll:document.documentElement.scrollHeight};})()');
+        assert.ok(bounds.bottom <= bounds.h + 1 && bounds.right <= bounds.w + 1 && bounds.scroll <= bounds.h + 1, scene + ' 页面未单屏 ' + JSON.stringify(bounds));
+        var out = await evaluate('Array.from(document.querySelectorAll(".card")).filter(n=>{var r=n.getBoundingClientRect();return r.left<0||r.right>innerWidth||r.top<0||r.bottom>innerHeight;}).map(n=>n.getAttribute("aria-label"))'); assert.equal(out.length, 0, scene + ' 卡牌越界 ' + out);
+        if (scene === 'round') { var buttons = await evaluate('Array.from(document.querySelectorAll("#handbar button")).map(n=>{var r=n.getBoundingClientRect();return {y:r.top,bottom:r.bottom};})'); assert.ok(buttons.every(function (r) { return r.y >= 0 && r.bottom <= size[1]; })); }
+        if (scene !== 'menu') { var sidebar = await evaluate('(function(){var box=document.getElementById("sidebar").getBoundingClientRect();return Array.from(document.querySelectorAll("#sidebar>*")).filter(n=>{var r=n.getBoundingClientRect();return r.top<box.top||r.bottom>box.bottom+1;}).map(n=>n.className);})()'); assert.equal(sidebar.length, 0, '状态栏内容越界 ' + sidebar); }
+        if (size[0] === 956 && size[1] === 440) await screenshot('iphone-landscape-' + scene);
+      }
+    }
+    await evaluate('document.body.style.padding=""');
+  });
+  await test('点数 R：引擎顺序、按钮和屏幕左到右均为 A 高 2 低', async function () {
+    await metrics(956, 440, true); await navigate('round');
+    await evaluate('(function(){var g=BT.app.game,u=BT.app.ui;g.run.hand.forEach(function(c,i){c.rank=[2,14,10,11,3,13,5,12][i];});u.render();})()');
+    await click('[data-act="sort-rank"]', true); var ranks = await evaluate('BT.app.game.run.hand.map(c=>c.rank)'); assert.deepEqual(ranks, [14,13,12,11,10,5,3,2]);
+    var visible = await evaluate('BT.app.game.run.hand.map(c=>({rank:c.rank,x:BT.app.ui.positions[c.id].x})).sort((a,b)=>a.x-b.x).map(c=>c.rank)'); assert.deepEqual(visible, ranks);
+    await evaluate('BT.app.game.run.hand.reverse();BT.app.ui.render()'); await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'r', code: 'KeyR' }); await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'r', code: 'KeyR' });
+    assert.deepEqual(await evaluate('BT.app.game.run.hand.map(c=>c.rank)'), ranks);
+  });
+  await test('默认计分留足阅读时间，阶段与倍率冲击可见', async function () {
+    await metrics(1440, 900, false); await navigate('round'); assert.equal(await evaluate('BT.app.ui.settings.speed'), 1);
+    await evaluate('window.__started=performance.now()'); await click('[data-act="play"]'); await wait('!!document.querySelector(".mult-stamp")');
+    assert.ok(await evaluate('!!document.querySelector("#score-phase")')); await wait('!BT.app.ui.busy');
+    assert.ok(await evaluate('performance.now()-window.__started>5000')); assert.ok(!await evaluate('!!document.querySelector("#score-phase")'));
   });
   await test('桌面计分回放与存档有效性', async function () {
     await metrics(1440, 900, false); await navigate('round'); await click('[data-act="play"]'); await wait('!BT.app.ui.busy');

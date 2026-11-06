@@ -3,8 +3,28 @@
   'use strict';
   function area(x, y, width, cardW) { return { x: x, y: y, width: width, cardW: cardW }; }
   function compute(w, h, run) {
-    var compact = w < 1100, portrait = compact && w < 760, width = compact ? Math.max(280, w) : 1600;
-    var phase = run ? run.phase : 'menu', layout = { mode: portrait ? 'portrait' : compact ? 'compact' : 'desktop', width: width, height: 900, centerY: 323, centerHeight: 272 };
+    var compact = w < 1100, landscape = compact && w > h && w >= 600 && h <= 600, portrait = compact && !landscape && w < 760, width = compact ? Math.max(280, w) : 1600;
+    var phase = run ? run.phase : 'menu', layout = { mode: landscape ? 'landscape' : portrait ? 'portrait' : compact ? 'compact' : 'desktop', width: width, height: 900, centerY: 323, centerHeight: 272 };
+    if (landscape) {
+      layout.height = Math.max(280, h); layout.sidebarWidth = 176; layout.actionsHeight = 54;
+      var x = 192, available = width - x - 12, handW = Math.min(76, Math.max(52, (h - 200) / 2.2));
+      var handY = h - layout.actionsHeight - handW * 1.4 - 8;
+      layout.jokers = area(x + 8, 73, available * 0.66 - 16, 42); layout.cons = area(x + available * 0.68, 73, available * 0.32 - 12, 38);
+      layout.centerY = 142; layout.centerHeight = Math.max(32, handY - layout.centerY - 8);
+      layout.hand = area(x + 8, handY, available - 16, handW);
+      layout.play = area(x + 16, layout.centerY + 4, available - 32, Math.max(26, Math.min(68, (layout.centerHeight - 8) / 1.4)));
+      var packHasHand = run && run.hand.length > 0;
+      if (phase === 'pack') {
+        layout.centerY = 52; layout.centerHeight = (packHasHand ? handY - 10 : h - layout.actionsHeight - 8) - layout.centerY;
+        layout.hideInventory = true;
+      }
+      if (phase === 'shop' || phase === 'blind_select' || phase === 'cash_out' || phase === 'won' || phase === 'game_over') layout.centerHeight = Math.max(80, h - layout.actionsHeight - layout.centerY - 8);
+      var cardY = layout.centerY + (phase === 'pack' ? 52 : 50);
+      var cardW = Math.max(36, Math.min(92, (layout.centerY + layout.centerHeight - cardY - (phase === 'shop' ? 25 : 3)) / 1.4));
+      layout.pack = area(x + 8, cardY, available - 16, cardW); layout.pack.columns = Math.max(3, Math.floor((available - 16) / (cardW + 12)));
+      layout.shop = [area(x + 8, cardY, available - 16, cardW)]; layout.shop[0].columns = layout.pack.columns;
+      return layout;
+    }
     if (!compact) {
       layout.jokers = area(374, 144, 757, 88); layout.cons = area(1198, 144, 342, 88);
       layout.hand = area(384, 626, 990, 120); layout.play = area(555, 392, 820, 120);
@@ -41,7 +61,7 @@
       if (!a.columns) { row(cards, a, zone); return; }
       for (var i = 0; i < cards.length; i += a.columns) row(cards.slice(i, i + a.columns), area(a.x, a.y + (i / a.columns) * (a.cardW * 1.4 + 30), a.width, a.cardW), zone);
     }
-    row(run.jokers, l.jokers, 'jokers', jokerSlots); row(run.cons, l.cons, 'cons', consSlots);
+    if (!l.hideInventory) { row(run.jokers, l.jokers, 'jokers', jokerSlots); row(run.cons, l.cons, 'cons', consSlots); }
     if (run.phase === 'round' || run.phase === 'pack') { if (l.hand.columns) grid(run.hand, l.hand, 'hand'); else row(run.hand, l.hand, 'hand', 0, true); }
     if (run.play.length) row(run.play, l.play, 'play');
     if (run.phase === 'pack') grid(run.pack.cards, l.pack, 'pack');
